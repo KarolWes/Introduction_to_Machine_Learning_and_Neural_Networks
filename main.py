@@ -1,5 +1,10 @@
 import math
+
 import pandas as pd
+import plotly
+import plotly.graph_objs as go
+import plotly.plotly as py
+from igraph import *
 
 
 def single_entropy(value: int, size: int):
@@ -106,8 +111,98 @@ def build_tree(data, outcome, depth=0):
             print((depth+1)*'\t'+f"decision:{1 if row[1]['positives'] > 0 else 0}")
     return
 
+def visualise(v_num):
+    v_label = map(str, range(v_num))
+    G = Graph.Tree(v_num, 10)
+    lay = G.layout('rt')
 
+    position = {k: lay[k] for k in range(v_num)}
+    Y = [lay[k][1] for k in range(v_num)]
+    M = max(Y)
+
+    es = EdgeSeq(G)  # sequence of edges
+    E = [e.tuple for e in G.es]  # list of edges
+
+    L = len(position)
+    Xn = [position[k][0] for k in range(L)]
+    Yn = [2 * M - position[k][1] for k in range(L)]
+    Xe = []
+    Ye = []
+    for edge in E:
+        Xe += [position[edge[0]][0], position[edge[1]][0], None]
+        Ye += [2 * M - position[edge[0]][1], 2 * M - position[edge[1]][1], None]
+
+    labels = v_label
+
+    # Create Plotly Traces
+
+    lines = go.Scatter(x=Xe,
+                       y=Ye,
+                       mode='lines',
+                       line=dict(color='rgb(210,210,210)', width=1),
+                       hoverinfo='none'
+                       )
+    dots = go.Scatter(x=Xn,
+                      y=Yn,
+                      mode='markers',
+                      name='',
+                      marker=dict(symbol='dot',
+                                  size=18,
+                                  color='#6175c1',  # '#DB4551', 
+                                  line=dict(color='rgb(50,50,50)', width=1)
+                                  ),
+                      text=labels,
+                      hoverinfo='text',
+                      opacity=0.8
+                      )
+
+    # Create Text Inside the Circle via Annotations
+
+    def make_annotations(pos, text, font_size=10,
+                         font_color='rgb(250,250,250)'):
+        L = len(pos)
+        if len(text) != L:
+            raise ValueError('The lists pos and text must have the same len')
+        annotations = go.Annotations()
+        for k in range(L):
+            annotations.append(
+                go.Annotation(
+                    text=labels[k],  # or replace labels with a different list 
+                    # for the text within the circle  
+                    x=pos[k][0], y=2 * M - position[k][1],
+                    xref='x1', yref='y1',
+                    font=dict(color=font_color, size=font_size),
+                    showarrow=False)
+            )
+        return annotations
+
+        # Add Axis Specifications and Create the Layout
+
+    axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
+                zeroline=False,
+                showgrid=False,
+                showticklabels=False,
+                )
+
+    layout = dict(title='Tree with Reingold-Tilford Layout',
+                  annotations=make_annotations(position, v_label),
+                  font=dict(size=12),
+                  showlegend=False,
+                  xaxis=go.XAxis(axis),
+                  yaxis=go.YAxis(axis),
+                  margin=dict(l=40, r=40, b=85, t=100),
+                  hovermode='closest',
+                  plot_bgcolor='rgb(248,248,248)'
+                  )
+
+    # Plot
+
+    data = go.Data([lines, dots])
+    fig = dict(data=data, layout=layout)
+    fig['layout'].update(annotations=make_annotations(position, v_label))
+    py.iplot(fig, filename='Tree-Reingold-Tilf')
 
 if __name__ == '__main__':
-    data, outcome = prepare_data()
-    build_tree(data, outcome)
+    # data, outcome = prepare_data()
+    # build_tree(data, outcome)
+    visualise(25)
