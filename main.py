@@ -4,12 +4,13 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 from matplotlib import pyplot as plt
+from matplotlib.pyplot import figure
 
 flat = []
 edges = []
 nodes = []
 labels = {}
-edges_l ={}
+edges_l = {}
 counter = 0
 
 const_box = 3
@@ -141,20 +142,31 @@ def build_tree(data, outcome, depth=0, parent=-1, desc=""):
     return
 
 
-def prepare_vis(labels: list):
-    max_x = const_box * len(labels)
+def calculate_pos():
+    pos = {}
+    max_x = 2*const_box* (len(flat)+1)
+    for i, row in enumerate(flat):
+        y = const_box * (len(flat)+1 - i)
+        step = max_x / len(row)
+        x = step/2
+        for node in row:
+            pos[node] = (x, y)
+            x += step
+    return pos
 
 
-def visualise(title: str = ""):
+
+
+def visualise(title: str = "graph"):
+    figure(figsize=(2*(len(flat)), 2*(len(flat))))
     G = nx.DiGraph()
     G.add_nodes_from(nodes)
     G.add_edges_from(edges)
-    pos = {0: (10, 10),
-           1: (7.5, 7.5), 2: (12.5, 7.5),
-           3: (6, 6), 4: (9, 6),
-           5: (11, 6), 6: (14, 6), 7: (17, 6)}
+    pos = calculate_pos()
     nx.draw_networkx(G, pos=pos, labels=labels, arrows=True,
-                     node_shape="s", node_color="white")
+                     bbox=dict(facecolor="skyblue",
+                               boxstyle="round", pad=0.3),
+                     edge_color="gray")
     nx.draw_networkx_edge_labels(G, pos=pos,
                                  edge_labels=edges_l,
                                  font_color='black')
@@ -168,16 +180,4 @@ if __name__ == '__main__':
     build_tree(data, outcome)
     print(labels)
     print(edges_l)
-    # visualise(nodes=np.arange(0, 8).tolist(),
-    #           edges=[(0, 1), (0, 2),
-    #                  (1, 3), (1, 4),
-    #                  (2, 5), (2, 6), (2, 7)],
-    #           labels={0: "CEO",
-    #                   1: "Team A Lead",
-    #                   2: "Team B Lead",
-    #                   3: "Staff A",
-    #                   4: "Staff B",
-    #                   5: "Staff C",
-    #                   6: "Staff D",
-    #                   7: "Staff E"}
-    #           )
+    visualise()
