@@ -1,10 +1,18 @@
 import math
 
+import numpy as np
 import pandas as pd
-import plotly
-import plotly.graph_objs as go
-import plotly.plotly as py
-from igraph import *
+import networkx as nx
+from matplotlib import pyplot as plt
+
+flat = []
+edges = []
+nodes = []
+labels = {}
+edges_l ={}
+counter = 0
+
+const_box = 3
 
 
 def single_entropy(value: int, size: int):
@@ -97,112 +105,79 @@ def purity_check(data, outcome, col):
     return purity, used_data
 
 
-def build_tree(data, outcome, depth=0):
+def build_tree(data, outcome, depth=0, parent=-1, desc=""):
+    global nodes, flat, edges, counter, labels
     best = best_branch(data, outcome)
     purity, res = purity_check(data, outcome, best)
+    while len(flat) <= depth + 1:
+        flat.append([])
+    nodes.append(counter)
+    flat[depth].append(counter)
+    labels[counter] = best
+    if parent != -1:
+        edges.append((parent, counter))
+        edges_l[(parent, counter)] = desc
+    current = counter
+    counter += 1
+
     for row in res.iterrows():
-        print(depth*'\t' + best + ' - '+str(row[0])+': ')
+        desc = str(row[0])
+        print(depth * '\t' + best + ' - ' + desc + ': ')
         if not row[1]['pure']:
             new_data = data[data[best] == row[0]]
             new_data = new_data.drop(best, axis='columns')
             new_out = outcome[new_data.index]
-            build_tree(new_data, new_out, depth+1)
+            build_tree(new_data, new_out, depth + 1, current, desc)
+
         else:
-            print((depth+1)*'\t'+f"decision:{1 if row[1]['positives'] > 0 else 0}")
+            decision = 1 if row[1]['positives'] > 0 else 0
+            print((depth + 1) * '\t' + f"decision:{decision}")
+            nodes.append(counter)
+            labels[counter] = decision
+            edges.append((current, counter))
+            edges_l[(current, counter)] = desc
+            flat[depth + 1].append(counter)
+            counter += 1
     return
 
-def visualise(v_num):
-    v_label = map(str, range(v_num))
-    G = Graph.Tree(v_num, 10)
-    lay = G.layout('rt')
 
-    position = {k: lay[k] for k in range(v_num)}
-    Y = [lay[k][1] for k in range(v_num)]
-    M = max(Y)
+def prepare_vis(labels: list):
+    max_x = const_box * len(labels)
 
-    es = EdgeSeq(G)  # sequence of edges
-    E = [e.tuple for e in G.es]  # list of edges
 
-    L = len(position)
-    Xn = [position[k][0] for k in range(L)]
-    Yn = [2 * M - position[k][1] for k in range(L)]
-    Xe = []
-    Ye = []
-    for edge in E:
-        Xe += [position[edge[0]][0], position[edge[1]][0], None]
-        Ye += [2 * M - position[edge[0]][1], 2 * M - position[edge[1]][1], None]
+def visualise(title: str = ""):
+    G = nx.DiGraph()
+    G.add_nodes_from(nodes)
+    G.add_edges_from(edges)
+    pos = {0: (10, 10),
+           1: (7.5, 7.5), 2: (12.5, 7.5),
+           3: (6, 6), 4: (9, 6),
+           5: (11, 6), 6: (14, 6), 7: (17, 6)}
+    nx.draw_networkx(G, pos=pos, labels=labels, arrows=True,
+                     node_shape="s", node_color="white")
+    nx.draw_networkx_edge_labels(G, pos=pos,
+                                 edge_labels=edges_l,
+                                 font_color='black')
+    plt.title(title)
+    plt.savefig(title + '.png', dpi=300)
+    plt.show()
 
-    labels = v_label
-
-    # Create Plotly Traces
-
-    lines = go.Scatter(x=Xe,
-                       y=Ye,
-                       mode='lines',
-                       line=dict(color='rgb(210,210,210)', width=1),
-                       hoverinfo='none'
-                       )
-    dots = go.Scatter(x=Xn,
-                      y=Yn,
-                      mode='markers',
-                      name='',
-                      marker=dict(symbol='dot',
-                                  size=18,
-                                  color='#6175c1',  # '#DB4551', 
-                                  line=dict(color='rgb(50,50,50)', width=1)
-                                  ),
-                      text=labels,
-                      hoverinfo='text',
-                      opacity=0.8
-                      )
-
-    # Create Text Inside the Circle via Annotations
-
-    def make_annotations(pos, text, font_size=10,
-                         font_color='rgb(250,250,250)'):
-        L = len(pos)
-        if len(text) != L:
-            raise ValueError('The lists pos and text must have the same len')
-        annotations = go.Annotations()
-        for k in range(L):
-            annotations.append(
-                go.Annotation(
-                    text=labels[k],  # or replace labels with a different list 
-                    # for the text within the circle  
-                    x=pos[k][0], y=2 * M - position[k][1],
-                    xref='x1', yref='y1',
-                    font=dict(color=font_color, size=font_size),
-                    showarrow=False)
-            )
-        return annotations
-
-        # Add Axis Specifications and Create the Layout
-
-    axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
-                zeroline=False,
-                showgrid=False,
-                showticklabels=False,
-                )
-
-    layout = dict(title='Tree with Reingold-Tilford Layout',
-                  annotations=make_annotations(position, v_label),
-                  font=dict(size=12),
-                  showlegend=False,
-                  xaxis=go.XAxis(axis),
-                  yaxis=go.YAxis(axis),
-                  margin=dict(l=40, r=40, b=85, t=100),
-                  hovermode='closest',
-                  plot_bgcolor='rgb(248,248,248)'
-                  )
-
-    # Plot
-
-    data = go.Data([lines, dots])
-    fig = dict(data=data, layout=layout)
-    fig['layout'].update(annotations=make_annotations(position, v_label))
-    py.iplot(fig, filename='Tree-Reingold-Tilf')
 
 if __name__ == '__main__':
-    # data, outcome = prepare_data()
-    # build_tree(data, outcome)
-    visualise(25)
+    data, outcome = prepare_data()
+    build_tree(data, outcome)
+    print(labels)
+    print(edges_l)
+    # visualise(nodes=np.arange(0, 8).tolist(),
+    #           edges=[(0, 1), (0, 2),
+    #                  (1, 3), (1, 4),
+    #                  (2, 5), (2, 6), (2, 7)],
+    #           labels={0: "CEO",
+    #                   1: "Team A Lead",
+    #                   2: "Team B Lead",
+    #                   3: "Staff A",
+    #                   4: "Staff B",
+    #                   5: "Staff C",
+    #                   6: "Staff D",
+    #                   7: "Staff E"}
+    #           )
