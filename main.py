@@ -1,10 +1,8 @@
 import math
 
-import numpy as np
 import pandas as pd
 import networkx as nx
 from matplotlib import pyplot as plt
-from matplotlib.pyplot import figure
 
 flat = []
 edges = []
@@ -14,6 +12,31 @@ edges_l = {}
 counter = 0
 
 const_box = 3
+
+
+# Legacy
+def map_age_groups(age: int):
+    if age > 40:
+        return "old"
+    elif age > 20:
+        return 'medium'
+    else:
+        return "young"
+
+
+def mapper(data: pd.DataFrame):
+    data['Age'] = data.apply(lambda row: (
+        "old" if row["Age"] > 40 else ("medium" if row["Age"] > 20 else "young")), axis=1)
+    return data
+
+
+def prepare_data():
+    data = pd.read_csv("data/titanic-homework.csv", index_col="PassengerId")
+    outcome = data['Survived']
+    outcome.name = "outcome"
+    data = data.drop(['Name', 'Survived'], axis='columns')
+    data = mapper(data)
+    return data, outcome
 
 
 def single_entropy(value: int, size: int):
@@ -43,31 +66,6 @@ def conditional_entropy(data: pd.DataFrame):
 def intrinsic(data: pd.DataFrame):
     data['intr'] = data.apply(lambda row: single_entropy(row['positives'], row['count']), axis=1)
     return data['intr'].sum(), data
-
-
-# Legacy
-def map_age_groups(age: int):
-    if age > 40:
-        return "old"
-    elif age > 20:
-        return 'medium'
-    else:
-        return "young"
-
-
-def mapper(data: pd.DataFrame):
-    data['Age'] = data.apply(lambda row: (
-        "old" if row["Age"] > 40 else ("medium" if row["Age"] > 20 else "young")), axis=1)
-    return data
-
-
-def prepare_data():
-    data = pd.read_csv("data/titanic-homework.csv", index_col="PassengerId")
-    outcome = data['Survived']
-    outcome.name = "outcome"
-    data = data.drop(['Name', 'Survived'], axis='columns')
-    data = mapper(data)
-    return data, outcome
 
 
 def best_branch(data, outcome):
@@ -144,7 +142,7 @@ def build_tree(data, outcome, depth=0, parent=-1, desc=""):
 
 def calculate_pos():
     pos = {}
-    max_x = 2*const_box* (len(flat)+1)
+    max_x = 2*const_box * (len(flat)+1)
     for i, row in enumerate(flat):
         y = const_box * (len(flat)+1 - i)
         step = max_x / len(row)
@@ -155,10 +153,8 @@ def calculate_pos():
     return pos
 
 
-
-
 def visualise(title: str = "graph"):
-    figure(figsize=(2*(len(flat)), 2*(len(flat))))
+    plt.figure(figsize=(2 * (len(flat)), 2 * (len(flat))))
     G = nx.DiGraph()
     G.add_nodes_from(nodes)
     G.add_edges_from(edges)
@@ -178,6 +174,4 @@ def visualise(title: str = "graph"):
 if __name__ == '__main__':
     data, outcome = prepare_data()
     build_tree(data, outcome)
-    print(labels)
-    print(edges_l)
     visualise()
