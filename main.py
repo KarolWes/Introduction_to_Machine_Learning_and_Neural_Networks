@@ -24,18 +24,46 @@ def map_age_groups(age: int):
         return "young"
 
 
+def cont_mapper(data: pd.DataFrame, out: pd.Series, col: str, min_group: int = 2):
+    results = {}
+    u_data = data[col]
+    s = u_data.size
+    data.name = col
+    u_data = pd.concat([u_data, out], axis=1)
+    u_data = u_data.sort_values(col)
+
+    last = u_data["outcome"].iloc[0]
+    for i in range(min_group, s - min_group):
+        if u_data["outcome"].iloc[i] != last:
+            last = u_data["outcome"].iloc[i]
+            upper = u_data.head(i + 1)
+            upper_stat = (upper["outcome"].sum()) / (i + 1)
+            lower = u_data.tail(s - 1 - i)
+            lower_stat = (lower["outcome"].sum()) / (s - 1 - i)
+            entry = [upper_stat, 1 - upper_stat, lower_stat, 1 - lower_stat]
+            results[i] = entry
+    ans = pd.DataFrame.from_dict(results, "index")
+    ans.columns = ["up", "neg_up", "low", "neg_low"]
+    maks = (ans.max().idxmax(), ans[ans.max().idxmax()].idxmax())
+    cut_age = u_data["Age"].iloc[maks[1]] - 0.5
+    data['Age'] = data.apply(lambda row: (
+        "younger" if row["Age"] < cut_age else "older"), axis=1)
+    return data
+
+
 def mapper(data: pd.DataFrame):
     data['Age'] = data.apply(lambda row: (
         "old" if row["Age"] > 40 else ("medium" if row["Age"] > 20 else "young")), axis=1)
     return data
 
 
-def prepare_data():
+def prepare_data(skip_mapping=False):
     data = pd.read_csv("data/titanic-homework.csv", index_col="PassengerId")
     outcome = data['Survived']
     outcome.name = "outcome"
     data = data.drop(['Name', 'Survived'], axis='columns')
-    data = mapper(data)
+    if not skip_mapping:
+        data = mapper(data)
     return data, outcome
 
 
@@ -68,8 +96,11 @@ def intrinsic(data: pd.DataFrame):
     return data['intr'].sum(), data
 
 
-def best_branch(data, outcome):
+def best_branch(data, outcome, cont_col=[]):
     results = {}
+    if len(cont_col) > 0:
+        for col in cont_col:
+            data = cont_mapper(data, outcome, col, 10)
     for col in data.columns:
         ent, aggr = entropy(data, outcome, col)
         # print(f"Entropy: {col}: {ent}")
@@ -85,10 +116,13 @@ def best_branch(data, outcome):
             ratio = 0
         # print(f"Ratio: {ratio}")
         results[col] = ratio
-    results = pd.DataFrame.from_dict(results, orient="index")
-    results.columns = ["ratio"]
-    results = results.sort_values("ratio", ascending=False)
-    return results.head(1).index.values[0]
+    if len(results) > 0:
+        results = pd.DataFrame.from_dict(results, orient="index")
+        results.columns = ["ratio"]
+        results = results.sort_values("ratio", ascending=False)
+        return results.head(1).index.values[0]
+    else:
+        return "unclassified"
 
 
 def purity_check(data, outcome, col):
@@ -104,12 +138,23 @@ def purity_check(data, outcome, col):
     return purity, used_data
 
 
-def build_tree(data, outcome, depth=0, parent=-1, desc=""):
+def build_tree(data, outcome, depth=0, parent=-1, desc="", cont_col=[]):
     global nodes, flat, edges, counter, labels
-    best = best_branch(data, outcome)
-    purity, res = purity_check(data, outcome, best)
     while len(flat) <= depth + 1:
         flat.append([])
+    best = best_branch(data, outcome, cont_col)
+    if best == "unclassified":
+        nodes.append(counter)
+        flat[depth].append(counter)
+        decision = outcome.mode().values[0]
+        labels[counter] = "~"+str(decision)
+        edges.append((parent, counter))
+        edges_l[(parent, counter)] = desc
+        print((depth + 1) * '\t' + f"decision:~{decision}")
+        counter += 1
+        return
+
+    purity, res = purity_check(data, outcome, best)
     nodes.append(counter)
     flat[depth].append(counter)
     labels[counter] = best
@@ -144,12 +189,13 @@ def calculate_pos():
     pos = {}
     max_x = 2*const_box * (len(flat)+1)
     for i, row in enumerate(flat):
-        y = const_box * (len(flat)+1 - i)
-        step = max_x / len(row)
-        x = step/2
-        for node in row:
-            pos[node] = (x, y)
-            x += step
+        if len(row) > 0:
+            y = const_box * (len(flat)+1 - i)
+            step = max_x / len(row)
+            x = step/2
+            for node in row:
+                pos[node] = (x, y)
+                x += step
     return pos
 
 
@@ -172,6 +218,6 @@ def visualise(title: str = "graph"):
 
 
 if __name__ == '__main__':
-    data, outcome = prepare_data()
-    build_tree(data, outcome)
+    data, outcome = prepare_data(skip_mapping=True)
+    build_tree(data, outcome, cont_col=["Age"])
     visualise()
