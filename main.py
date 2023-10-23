@@ -100,7 +100,7 @@ def best_branch(data, outcome, cont_col=[]):
     results = {}
     if len(cont_col) > 0:
         for col in cont_col:
-            data = cont_mapper(data, outcome, col, 10)
+            data = cont_mapper(data, outcome, col)
     for col in data.columns:
         ent, aggr = entropy(data, outcome, col)
         # print(f"Entropy: {col}: {ent}")
@@ -120,7 +120,14 @@ def best_branch(data, outcome, cont_col=[]):
         results = pd.DataFrame.from_dict(results, orient="index")
         results.columns = ["ratio"]
         results = results.sort_values("ratio", ascending=False)
-        return results.head(1).index.values[0]
+        cond = True
+        i = 1
+        while cond:
+            best_col = results.head(i).tail(1).index.values[0]
+            gb = len(data.groupby(best_col)[best_col].count())
+            cond = gb < 2
+            i += 1
+        return best_col
     else:
         return "unclassified"
 
@@ -146,11 +153,15 @@ def build_tree(data, outcome, depth=0, parent=-1, desc="", cont_col=[]):
     if best == "unclassified":
         nodes.append(counter)
         flat[depth].append(counter)
-        decision = outcome.mode().values[0]
-        labels[counter] = "~"+str(decision)
+        test = outcome.sum()
+        if test == 0 or test == outcome.size:
+            decision = outcome.mode().values[0]
+        else:
+            decision = "~" + str(outcome.mode().values[0])
+        labels[counter] = decision
         edges.append((parent, counter))
         edges_l[(parent, counter)] = desc
-        print((depth + 1) * '\t' + f"decision:~{decision}")
+        print((depth + 1) * '\t' + f"decision:{decision}")
         counter += 1
         return
 
@@ -187,12 +198,12 @@ def build_tree(data, outcome, depth=0, parent=-1, desc="", cont_col=[]):
 
 def calculate_pos():
     pos = {}
-    max_x = 2*const_box * (len(flat)+1)
+    max_x = 2 * const_box * (len(flat) + 1)
     for i, row in enumerate(flat):
         if len(row) > 0:
-            y = const_box * (len(flat)+1 - i)
+            y = const_box * (len(flat) + 1 - i)
             step = max_x / len(row)
-            x = step/2
+            x = step / 2
             for node in row:
                 pos[node] = (x, y)
                 x += step
